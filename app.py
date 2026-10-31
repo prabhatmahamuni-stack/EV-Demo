@@ -11,7 +11,7 @@ CLIENT_SECRET = "RSO8Q~zDrTM~PkNIzAqytp7xU_-hzfrOF18-3ble"
 
 AUTHORITY = "https://login.microsoftonline.com/common"
 REDIRECT_URI = "http://localhost:8501/" 
-SCOPE = ["User.Read", "email", "profile", "openid"]
+SCOPE = ["User.Read"]
 
 def build_auth_app():
     return msal.ConfidentialClientApplication(
