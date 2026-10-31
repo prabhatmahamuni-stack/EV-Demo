@@ -10,7 +10,7 @@ CLIENT_ID = "a29275f0-c21e-49a3-8e78-5a6659524631"
 CLIENT_SECRET = "RSO8Q~zDrTM~PkNIzAqytp7xU_-hzfrOF18-3ble"
 
 AUTHORITY = "https://login.microsoftonline.com/common"
-REDIRECT_URI = "[https://evdemo.streamlit.app/](https://evdemo.streamlit.app/)" 
+REDIRECT_URI = "https://evdemo.streamlit.app/" 
 SCOPE = ["User.Read"]
 
 def build_auth_app():
