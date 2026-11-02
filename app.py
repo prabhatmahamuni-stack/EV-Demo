@@ -16,7 +16,7 @@ REDIRECT_URI = "http://localhost:8501/"
 # We now ONLY request OpenID Connect (OIDC) authentication scopes.
 # This prevents Microsoft from asking for Graph API directory access, 
 # drastically reducing the chance of triggering an IT Admin block.
-SCOPE = ["email", "profile", "openid"]
+SCOPE = ["email"]
 
 def build_auth_app():
     return msal.ConfidentialClientApplication(
