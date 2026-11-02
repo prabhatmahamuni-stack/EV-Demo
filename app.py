@@ -10,8 +10,13 @@ CLIENT_ID = "a29275f0-c21e-49a3-8e78-5a6659524631"
 CLIENT_SECRET = "RSO8Q~zDrTM~PkNIzAqytp7xU_-hzfrOF18-3ble"
 
 AUTHORITY = "https://login.microsoftonline.com/common"
-REDIRECT_URI = "https://evdemo.streamlit.app/" 
-SCOPE = ["User.Read"]
+REDIRECT_URI = "http://localhost:8501/" 
+
+# 🚨 KEY CHANGE: We dropped "User.Read" completely.
+# We now ONLY request OpenID Connect (OIDC) authentication scopes.
+# This prevents Microsoft from asking for Graph API directory access, 
+# drastically reducing the chance of triggering an IT Admin block.
+SCOPE = ["email", "profile", "openid"]
 
 def build_auth_app():
     return msal.ConfidentialClientApplication(
@@ -38,7 +43,8 @@ if "code" in query_params:
         auth_code, scopes=SCOPE, redirect_uri=REDIRECT_URI
     )
     
-    if "access_token" in result:
+    # Fallback to checking id_token_claims directly if access_token isn't prominent
+    if "access_token" in result or "id_token_claims" in result:
         claims = result.get("id_token_claims", {})
         email = claims.get("preferred_username") or claims.get("email", "Not Provided")
         name = claims.get("name", "Not Provided")
@@ -55,7 +61,7 @@ if "code" in query_params:
             st.query_params.clear()
             st.rerun()
     else:
-        st.error(f"Authentication failed: {result.get('error_description')}")
+        st.error(f"Authentication failed: {result.get('error_description', 'Unknown Error')}")
 
 else:
     auth_app = build_auth_app()
