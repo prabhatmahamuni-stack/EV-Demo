@@ -10,7 +10,7 @@ CLIENT_ID = "a29275f0-c21e-49a3-8e78-5a6659524631"
 CLIENT_SECRET = "RSO8Q~zDrTM~PkNIzAqytp7xU_-hzfrOF18-3ble"
 
 AUTHORITY = "https://login.microsoftonline.com/common"
-REDIRECT_URI = "http://localhost:8501/" 
+REDIRECT_URI = "https://evdemo.streamlit.app/" 
 
 # 🚨 KEY CHANGE: We dropped "User.Read" completely.
 # We now ONLY request OpenID Connect (OIDC) authentication scopes.
