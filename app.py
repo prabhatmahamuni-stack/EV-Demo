@@ -17,14 +17,29 @@ MS_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
 MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
 # --- GOOGLE CREDENTIALS ---
-# 🚨 Replace these with the keys from your Google Cloud Console 🚨
 GOOG_CLIENT_ID = "133119225376-8h8c1sr5fgehjb7ud3clgn8ag9l2aou0.apps.googleusercontent.com" 
 GOOG_CLIENT_SECRET = "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"
 GOOG_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOG_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-# The bare minimum scopes for both platforms
+# The bare minimum scopes for both platforms (Profile added to fetch Name)
 SCOPE = "openid email profile"
+
+# ==========================================
+# 🏢 AXIS BANK CORPORATE SALARY DATABASE
+# ==========================================
+# We map the secure Google domains (hd) and Microsoft Tenant IDs (tid) 
+# to clean company names for the frontend to avoid asking for Directory permissions.
+COMPANY_DIRECTORY = {
+    # Google Domains
+    "ninjacart.com": "Ninjacart",
+    "playvibe.in": "PlayVibe",
+    "axisbank.com": "Axis Bank",
+    
+    # Microsoft Tenant IDs (Replace with your actual test IDs)
+    "YOUR_TEST_TENANT_ID_HERE": "Mahamuni Enterprises",
+    "CROMA_TENANT_ID_HERE": "Croma / Infiniti Retail"
+}
 
 # ==========================================
 # 🛠️ HELPER FUNCTIONS
@@ -79,20 +94,31 @@ if "code" in query_params and "state" in query_params:
         result = response.json()
         id_token = result.get("id_token")
         claims = decode_jwt(id_token)
-        email = claims.get("email") or claims.get("preferred_username", "Not Provided")
         
+        # 1. Extract Name & Email
+        email = claims.get("email") or claims.get("preferred_username", "Not Provided")
+        user_name = claims.get("name", "Name Not Fetched (Profile scope missing)")
+        
+        # 2. Extract Enterprise ID and map to Company Name
+        if provider == "microsoft":
+            domain_val = claims.get("tid", "Unknown Tenant")
+        elif provider == "google":
+            domain_val = claims.get("hd", "Personal Account (Failed Corporate Check)")
+            
+        company_name = COMPANY_DIRECTORY.get(domain_val, "Unregistered Corporate Partner")
+        
+        # 3. Build the UI
         st.success(f"✅ Verified via {provider.capitalize()}!")
         st.divider()
+        st.write(f"**Verified Name:** {user_name}")
         st.write(f"**Verified Email:** {email}")
+        st.write(f"**Verified Employer:** {company_name} *(ID: {domain_val})*")
+        st.divider()
         
-        # Display provider-specific enterprise claims
-        if provider == "microsoft":
-            tenant_id = claims.get("tid", "Unknown Tenant")
-            st.write(f"**Enterprise Tenant ID:** {tenant_id}")
-        elif provider == "google":
-            hosted_domain = claims.get("hd", "Personal Account (Failed Corporate Check)")
-            st.write(f"**Hosted Domain (Company):** {hosted_domain}")
-            
+        # 4. SHOW RAW BACKEND PAYLOAD (Directly on screen)
+        st.write("#### 🛠️ Raw Backend Payload (Data from Provider)")
+        st.json(claims)
+        
         st.divider()
         if st.button("Restart Demo"):
             st.query_params.clear()
