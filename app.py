@@ -24,7 +24,7 @@ GOOG_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOG_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 # The bare minimum scopes for both platforms
-SCOPE = "openid email"
+SCOPE = "openid email profile"
 
 # ==========================================
 # 🛠️ HELPER FUNCTIONS
