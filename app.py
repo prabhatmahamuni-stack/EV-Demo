@@ -7,27 +7,30 @@ import json
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-CLIENT_ID = "a29275f0-c21e-49a3-8e78-5a6659524631" 
-CLIENT_SECRET = "RSO8Q~zDrTM~PkNIzAqytp7xU_-hzfrOF18-3ble"
-
-# Ensure this matches your Azure App Registration exactly
 REDIRECT_URI = "https://evdemo.streamlit.app/" 
+# Change to "http://localhost:8501/" if testing locally
 
-# 🚨 THE BARE MINIMUM SCOPE
-# We bypass MSAL to strictly ask ONLY for openid and email.
-# We explicitly drop "profile" (Name) and "offline_access" (Maintain access).
+# --- MICROSOFT CREDENTIALS ---
+MS_CLIENT_ID = "a29275f0-c21e-49a3-8e78-5a6659524631" 
+MS_CLIENT_SECRET = "RSO8Q~zDrTM~PkNIzAqytp7xU_-hzfrOF18-3ble"
+MS_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+
+# --- GOOGLE CREDENTIALS ---
+# 🚨 Replace these with the keys from your Google Cloud Console 🚨
+GOOG_CLIENT_ID = "133119225376-8h8c1sr5fgehjb7ud3clgn8ag9l2aou0.apps.googleusercontent.com" 
+GOOG_CLIENT_SECRET = "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"
+GOOG_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOG_TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+# The bare minimum scopes for both platforms
 SCOPE = "openid email"
-
-AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
 # ==========================================
 # 🛠️ HELPER FUNCTIONS
 # ==========================================
 def decode_jwt(token):
-    # JWTs have 3 parts separated by dots. The middle part is the data payload.
     payload = token.split('.')[1]
-    # Add padding if required by base64
     payload += '=' * (-len(payload) % 4)
     decoded_bytes = base64.urlsafe_b64decode(payload)
     return json.loads(decoded_bytes)
@@ -38,57 +41,95 @@ def decode_jwt(token):
 st.set_page_config(page_title="Axis Bank EV Demo", page_icon="🏦")
 
 st.title("Axis Bank - Employment Verification")
-st.write("Verify your corporate email to continue.")
+st.write("Select your corporate identity provider to continue.")
 
 query_params = st.query_params
 
-if "code" in query_params:
+# ------------------------------------------
+# CALLBACK HANDLER (Post-Login)
+# ------------------------------------------
+if "code" in query_params and "state" in query_params:
     auth_code = query_params["code"]
+    provider = query_params["state"] # Tells us if they used Google or MS
     
-    # Manually exchange the code for a token (Bypassing MSAL entirely)
-    token_data = {
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "code": auth_code,
-        "redirect_uri": REDIRECT_URI,
-        "grant_type": "authorization_code",
-    }
-    
-    response = requests.post(TOKEN_URL, data=token_data)
+    if provider == "microsoft":
+        token_data = {
+            "client_id": MS_CLIENT_ID,
+            "client_secret": MS_CLIENT_SECRET,
+            "code": auth_code,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+        token_url = MS_TOKEN_URL
+        
+    elif provider == "google":
+        token_data = {
+            "client_id": GOOG_CLIENT_ID,
+            "client_secret": GOOG_CLIENT_SECRET,
+            "code": auth_code,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+        token_url = GOOG_TOKEN_URL
+
+    # Execute the backend token swap
+    response = requests.post(token_url, data=token_data)
     
     if response.status_code == 200:
         result = response.json()
         id_token = result.get("id_token")
-        
-        # Decode the token payload
         claims = decode_jwt(id_token)
         email = claims.get("email") or claims.get("preferred_username", "Not Provided")
-        tenant_id = claims.get("tid", "Unknown Tenant")
         
-        st.success("✅ Email Verified!")
+        st.success(f"✅ Verified via {provider.capitalize()}!")
         st.divider()
         st.write(f"**Verified Email:** {email}")
-        st.write(f"**Tenant ID:** {tenant_id}")
-        st.write("*(Notice: Name is not fetched because 'profile' scope was dropped)*")
-        st.divider()
         
+        # Display provider-specific enterprise claims
+        if provider == "microsoft":
+            tenant_id = claims.get("tid", "Unknown Tenant")
+            st.write(f"**Enterprise Tenant ID:** {tenant_id}")
+        elif provider == "google":
+            hosted_domain = claims.get("hd", "Personal Account (Failed Corporate Check)")
+            st.write(f"**Hosted Domain (Company):** {hosted_domain}")
+            
+        st.divider()
         if st.button("Restart Demo"):
             st.query_params.clear()
             st.rerun()
     else:
-        st.error(f"Authentication failed: {response.text}")
+        st.error(f"{provider.capitalize()} Authentication failed: {response.text}")
 
+# ------------------------------------------
+# LOGIN BUTTONS (Pre-Login)
+# ------------------------------------------
 else:
-    # Manually construct the login URL
-    auth_params = {
-        "client_id": CLIENT_ID,
+    col1, col2 = st.columns(2)
+    
+    # Microsoft Button
+    ms_params = {
+        "client_id": MS_CLIENT_ID,
         "response_type": "code",
         "redirect_uri": REDIRECT_URI,
         "response_mode": "query",
         "scope": SCOPE,
+        "state": "microsoft", # Hidden tag
     }
-    login_url = f"{AUTH_URL}?{urllib.parse.urlencode(auth_params)}"
-    
-    st.link_button("Verify Corporate Email", login_url, type="primary")
+    ms_login_url = f"{MS_AUTH_URL}?{urllib.parse.urlencode(ms_params)}"
+    with col1:
+        st.link_button("🏢 Verify with Microsoft", ms_login_url, type="secondary", use_container_width=True)
 
-st.caption("🔒 Lowest invasive request prototype. No persistent access requested.")
+    # Google Button
+    goog_params = {
+        "client_id": GOOG_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": REDIRECT_URI,
+        "scope": SCOPE,
+        "state": "google", # Hidden tag
+        "prompt": "consent",
+    }
+    goog_login_url = f"{GOOG_AUTH_URL}?{urllib.parse.urlencode(goog_params)}"
+    with col2:
+        st.link_button("🌐 Verify with Google", goog_login_url, type="primary", use_container_width=True)
+        
+    st.caption("🔒 Lowest invasive request prototype. No persistent access requested.")
