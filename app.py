@@ -1,106 +1,101 @@
 import streamlit as st
 import requests
 import streamlit.components.v1 as components
+import uuid
 
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
+# 🚨 Paste your keys from the Nango Environment Settings here
 NANGO_PUBLIC_KEY = "8cada06d-dfa1-47b1-be93-3b28e084ee1f"
 NANGO_SECRET_KEY = "51b311fe-57b9-4a14-b142-44900773cfa6"
 
-# These must match the Integration IDs you set in the Nango Dashboard
-GOOGLE_INTEGRATION_ID = "google-oauth"
+# Based on your screenshot, this must be "microsoft-entra-id"
 MICROSOFT_INTEGRATION_ID = "microsoft-entra-id"
+GOOGLE_INTEGRATION_ID = "google-oauth"
 
-# In a production app, this is dynamic. For the POC, we hardcode an applicant ID.
-CONNECTION_ID = "axis-applicant-001" 
-
-st.set_page_config(page_title="Axis Bank EV", page_icon="🏦")
-st.title("Axis Bank - Employment Verification")
+# Generate a unique session ID for the applicant so data doesn't overlap
+if 'connection_id' not in st.session_state:
+    st.session_state.connection_id = f"axis-applicant-{uuid.uuid4().hex[:6]}"
 
 # ==========================================
 # 🛠️ NANGO FRONTEND UI (JAVASCRIPT COMPONENT)
 # ==========================================
-# This creates a native HTML button that triggers Nango's secure JS popup modal.
 def render_nango_button(provider_id, button_text, color):
     components.html(f"""
         <script src="https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest"></script>
-        <button id="auth-btn" style="padding: 10px; background-color: {color}; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; font-family: sans-serif; font-weight: bold;">
+        <button id="auth-btn" style="padding: 12px; background-color: {color}; color: white; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-family: sans-serif; font-weight: bold; font-size: 16px;">
             {button_text}
         </button>
         <script>
-            // Initialize Nango SDK
             const nango = new Nango('{NANGO_PUBLIC_KEY}');
-            
             document.getElementById('auth-btn').addEventListener('click', function() {{
-                // This opens the Nango popup to securely handle OAuth
-                nango.auth('{provider_id}', '{CONNECTION_ID}')
-                    .then((result) => console.log('Nango Auth Success!'))
-                    .catch((err) => console.log('User cancelled or error', err));
+                nango.auth('{provider_id}', '{st.session_state.connection_id}')
+                    .then((result) => console.log('Auth Success!'))
+                    .catch((err) => console.log('Error:', err));
             }});
         </script>
-    """, height=50)
+    """, height=60)
 
 # ==========================================
-# 🎨 THE EMAIL-FIRST ROUTING ENGINE
+# 🎨 UI & APP LOGIC
 # ==========================================
-st.write("We use domain pre-discovery to bypass strict corporate firewalls.")
-user_input_email = st.text_input("Enter your corporate email to begin (e.g. prabhat@tata.com):")
+st.set_page_config(page_title="Axis Bank EV", page_icon="🏦")
+st.title("Axis Bank - Employment Verification")
+st.write("Select your corporate identity provider to instantly verify your employment.")
 
-if user_input_email:
-    domain = user_input_email.split("@")[-1].lower()
-    
-    # 1. THE FIREWALL CHECK
-    # Here we route known strict MDM domains to the fallback instantly.
-    STRICT_MDM_DOMAINS = ["tata.com", "croma.com", "ey.com", "reliance.com"]
-    
-    if domain in STRICT_MDM_DOMAINS:
-        st.warning(f"🔒 Our telemetry shows {domain.capitalize()} blocks SSO connections. Routing to secure fallback.")
-        st.button("📄 Upload Offer Letter / Payslip (EV4)")
-        
-    # 2. THE HAPPY PATH (NANGO)
-    else:
-        st.success("⚡ Fast Verification Available!")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            render_nango_button(MICROSOFT_INTEGRATION_ID, "🏢 Verify with Microsoft", "#2F2F2F")
-        with col2:
-            render_nango_button(GOOGLE_INTEGRATION_ID, "🌐 Verify with Google", "#1A73E8")
+# 1. SHOW THE BUTTONS IMMEDIATELY
+col1, col2 = st.columns(2)
+with col1:
+    render_nango_button(MICROSOFT_INTEGRATION_ID, "🏢 Verify with Microsoft", "#2F2F2F")
+with col2:
+    render_nango_button(GOOGLE_INTEGRATION_ID, "🌐 Verify with Google", "#1A73E8")
 
-# ==========================================
-# 📥 NANGO BACKEND API PROXY (DATA FETCH)
-# ==========================================
+st.caption("🔒 Verified secure connection.")
 st.divider()
-st.write("### Backend Data Verification")
-st.write("*(Click this after completing the popup flow above)*")
 
-provider_to_test = st.radio("Which provider did you just test?", ["Google", "Microsoft"], horizontal=True)
+# ==========================================
+# 📥 NANGO BACKEND DATA FETCH (THE "DETECTION")
+# ==========================================
+st.write("### 2. View Verified Identity")
+st.write("*(Click this button ONLY AFTER you complete the popup login above)*")
 
-if st.button("Fetch Employee Data"):
-    # 1. Setup the Nango Proxy Headers
-    provider_id = GOOGLE_INTEGRATION_ID if provider_to_test == "Google" else MICROSOFT_INTEGRATION_ID
-    
-    headers = {
-        "Authorization": f"Bearer {NANGO_SECRET_KEY}",
-        "Connection-Id": CONNECTION_ID,
-        "Provider-Config-Key": provider_id
-    }
-    
-    # 2. Define the exact endpoint to hit via the proxy
-    if provider_to_test == "Google":
-        proxy_url = "https://api.nango.dev/proxy/oauth2/v3/userinfo"
-    else:
-        # Microsoft Graph API endpoint
-        proxy_url = "https://api.nango.dev/proxy/v1.0/me"
+provider_to_test = st.radio("Which provider did you just use?", ["Microsoft", "Google"], horizontal=True)
 
-    # 3. Make the API Call
-    # Notice we don't send any OAuth tokens! Nango injects them silently.
-    response = requests.get(proxy_url, headers=headers)
-    
-    if response.status_code == 200:
-        st.success(f"✅ Data fetched successfully via Nango Proxy for '{CONNECTION_ID}'!")
-        st.json(response.json())
-    else:
-        st.error("Authentication not found. Did you complete the popup flow?")
-        st.json(response.json())
+if st.button("Fetch My Employee Data", type="primary"):
+    with st.spinner("Securely fetching verified data via Nango..."):
+        
+        provider_id = GOOGLE_INTEGRATION_ID if provider_to_test == "Google" else MICROSOFT_INTEGRATION_ID
+        
+        # We use Nango's Proxy API to fetch data without handling tokens ourselves
+        headers = {
+            "Authorization": f"Bearer {NANGO_SECRET_KEY}",
+            "Connection-Id": st.session_state.connection_id,
+            "Provider-Config-Key": provider_id
+        }
+        
+        proxy_url = "https://api.nango.dev/proxy/oauth2/v3/userinfo" if provider_to_test == "Google" else "https://api.nango.dev/proxy/v1.0/me"
+
+        response = requests.get(proxy_url, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Detect email automatically
+            email = data.get("email") or data.get("userPrincipalName", "Not Found")
+            name = data.get("name") or data.get("displayName", "Not Found")
+            
+            st.success("✅ Employment Identity Verified!")
+            
+            st.write(f"**Verified Name:** {name}")
+            st.write(f"**Verified Email:** {email}")
+            
+            # Auto-detect domain from the fetched email
+            if "@" in email:
+                domain = email.split("@")[-1]
+                st.write(f"**Detected Enterprise Domain:** `{domain}`")
+                
+            with st.expander("🛠️ View Raw Nango Proxy Payload"):
+                st.json(data)
+        else:
+            st.error("⚠️ Could not fetch data. Ensure you completed the popup login before clicking this button.")
