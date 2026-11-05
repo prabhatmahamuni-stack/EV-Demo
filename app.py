@@ -8,8 +8,7 @@ st.set_page_config(page_title="Axis Bank EV Demo", page_icon="🏦")
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-# Paste your original "Default - Full access" Secret Key (ending in cfa6) here.
-# Since we are fetching the token securely on the backend, one key does everything!
+# Use your original "Default - Full access" Secret Key (ending in cfa6).
 NANGO_SECRET_KEY = "51b311fe-57b9-4a14-b142-44900773cfa6"
 
 MICROSOFT_INTEGRATION_ID = "microsoft-entra-id"
@@ -23,25 +22,31 @@ query_params = st.query_params
 # ==========================================
 # 🔑 1. GENERATE SESSION TOKEN (BACKEND)
 # ==========================================
-# We securely generate a short-lived connect session (30m) via Nango's API.
 @st.cache_data(ttl=1500)
-def fetch_session_token(secret_key):
+def fetch_session_token(secret_key, connection_id):
     url = "https://api.nango.dev/connect/sessions"
     headers = {
         "Authorization": f"Bearer {secret_key}",
         "Content-Type": "application/json"
     }
-    payload = {"tags": {}}
+    
+    # THE FIX 1: We cryptographically bind the connection_id to the token
+    payload = {
+        "end_user": {
+            "id": connection_id
+        },
+        "allowed_integrations": [MICROSOFT_INTEGRATION_ID, GOOGLE_INTEGRATION_ID]
+    }
     
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code in [200, 201]:
-        return response.json().get("data", {}).get("token")
+        data = response.json()
+        return data.get("token") or data.get("data", {}).get("token")
     else:
         st.error(f"Failed to generate session token: {response.text}")
         return None
 
-# Fetch the temporary 30-minute token
-session_token = fetch_session_token(NANGO_SECRET_KEY)
+session_token = fetch_session_token(NANGO_SECRET_KEY, st.session_state.connection_id)
 
 # ==========================================
 # 📥 2. SUCCESS & AUTO-FETCH
@@ -101,13 +106,13 @@ else:
             <script type="module">
                 import Nango from 'https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest/+esm';
                 
-                // Initialize Nango securely with the backend Session Token, NOT a static API key
                 const nango = new Nango({{ connectSessionToken: '{session_token}' }});
                 
                 window.login = function(provider) {{
                     const provider_id = provider === 'google' ? '{GOOGLE_INTEGRATION_ID}' : '{MICROSOFT_INTEGRATION_ID}';
                     
-                    nango.auth(provider_id, '{st.session_state.connection_id}')
+                    // THE FIX 2: We completely remove the connection_id from the frontend call.
+                    nango.auth(provider_id)
                         .then(() => {{
                             const baseUrl = window.parent.location.protocol + "//" + window.parent.location.host + window.parent.location.pathname;
                             window.parent.location.href = baseUrl + "?nango_success=true&provider=" + provider;
