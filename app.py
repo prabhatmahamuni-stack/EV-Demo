@@ -31,11 +31,13 @@ def fetch_session_token(secret_key, connection_id):
     }
     
     # THE FIX 1: We cryptographically bind the connection_id to the token
+    # Change this block inside your fetch_session_token function:
     payload = {
         "end_user": {
             "id": connection_id
         },
-        "allowed_integrations": [MICROSOFT_INTEGRATION_ID, GOOGLE_INTEGRATION_ID]
+        # THE FIX: Remove GOOGLE_INTEGRATION_ID so Nango doesn't crash looking for it
+        "allowed_integrations": [MICROSOFT_INTEGRATION_ID]
     }
     
     response = requests.post(url, headers=headers, json=payload)
