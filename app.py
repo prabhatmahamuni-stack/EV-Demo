@@ -8,7 +8,7 @@ st.set_page_config(page_title="Axis Bank EV", page_icon="🏦")
 # ⚙️ CONFIGURATION
 # ==========================================
 # 🚨 Paste your keys from the Nango Environment Settings here
-NANGO_PUBLIC_KEY = "8cada06d-dfa1-47b1-be93-3b28e084ee1f"
+NANGO_PUBLIC_KEY = "127abd01-31d8-4073-9014-a514fda5ca21"
 NANGO_SECRET_KEY = "51b311fe-57b9-4a14-b142-44900773cfa6"
 
 # Ensure these match your Nango dashboard exactly
