@@ -1,161 +1,106 @@
 import streamlit as st
 import requests
-import urllib.parse
-import base64
-import json
+import streamlit.components.v1 as components
 
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-REDIRECT_URI = "https://evdemo.streamlit.app/" 
-# Change to "http://localhost:8501/" if testing locally
+NANGO_PUBLIC_KEY = "8cada06d-dfa1-47b1-be93-3b28e084ee1f"
+NANGO_SECRET_KEY = "51b311fe-57b9-4a14-b142-44900773cfa6"
 
-# --- MICROSOFT CREDENTIALS ---
-MS_CLIENT_ID = "a29275f0-c21e-49a3-8e78-5a6659524631" 
-MS_CLIENT_SECRET = "RSO8Q~zDrTM~PkNIzAqytp7xU_-hzfrOF18-3ble"
-MS_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+# These must match the Integration IDs you set in the Nango Dashboard
+GOOGLE_INTEGRATION_ID = "google-oauth"
+MICROSOFT_INTEGRATION_ID = "microsoft-entra-id"
 
-# --- GOOGLE CREDENTIALS ---
-GOOG_CLIENT_ID = "133119225376-8h8c1sr5fgehjb7ud3clgn8ag9l2aou0.apps.googleusercontent.com" 
-GOOG_CLIENT_SECRET = "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"
-GOOG_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOG_TOKEN_URL = "https://oauth2.googleapis.com/token"
+# In a production app, this is dynamic. For the POC, we hardcode an applicant ID.
+CONNECTION_ID = "axis-applicant-001" 
 
-# The bare minimum scopes for both platforms (Profile added to fetch Name)
-SCOPE = "openid email profile"
-
-# ==========================================
-# 🏢 AXIS BANK CORPORATE SALARY DATABASE
-# ==========================================
-# We map the secure Google domains (hd) and Microsoft Tenant IDs (tid) 
-# to clean company names for the frontend to avoid asking for Directory permissions.
-COMPANY_DIRECTORY = {
-    # Google Domains
-    "ninjacart.com": "Ninjacart",
-    "playvibe.in": "PlayVibe",
-    "axisbank.com": "Axis Bank",
-    
-    # Microsoft Tenant IDs (Replace with your actual test IDs)
-    "YOUR_TEST_TENANT_ID_HERE": "Mahamuni Enterprises",
-    "CROMA_TENANT_ID_HERE": "Croma / Infiniti Retail"
-}
-
-# ==========================================
-# 🛠️ HELPER FUNCTIONS
-# ==========================================
-def decode_jwt(token):
-    payload = token.split('.')[1]
-    payload += '=' * (-len(payload) % 4)
-    decoded_bytes = base64.urlsafe_b64decode(payload)
-    return json.loads(decoded_bytes)
-
-# ==========================================
-# 🎨 UI & APP LOGIC
-# ==========================================
-st.set_page_config(page_title="Axis Bank EV Demo", page_icon="🏦")
-
+st.set_page_config(page_title="Axis Bank EV", page_icon="🏦")
 st.title("Axis Bank - Employment Verification")
-st.write("Select your corporate identity provider to continue.")
 
-query_params = st.query_params
+# ==========================================
+# 🛠️ NANGO FRONTEND UI (JAVASCRIPT COMPONENT)
+# ==========================================
+# This creates a native HTML button that triggers Nango's secure JS popup modal.
+def render_nango_button(provider_id, button_text, color):
+    components.html(f"""
+        <script src="https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest"></script>
+        <button id="auth-btn" style="padding: 10px; background-color: {color}; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; font-family: sans-serif; font-weight: bold;">
+            {button_text}
+        </button>
+        <script>
+            // Initialize Nango SDK
+            const nango = new Nango('{NANGO_PUBLIC_KEY}');
+            
+            document.getElementById('auth-btn').addEventListener('click', function() {{
+                // This opens the Nango popup to securely handle OAuth
+                nango.auth('{provider_id}', '{CONNECTION_ID}')
+                    .then((result) => console.log('Nango Auth Success!'))
+                    .catch((err) => console.log('User cancelled or error', err));
+            }});
+        </script>
+    """, height=50)
 
-# ------------------------------------------
-# CALLBACK HANDLER (Post-Login)
-# ------------------------------------------
-if "code" in query_params and "state" in query_params:
-    auth_code = query_params["code"]
-    provider = query_params["state"] # Tells us if they used Google or MS
+# ==========================================
+# 🎨 THE EMAIL-FIRST ROUTING ENGINE
+# ==========================================
+st.write("We use domain pre-discovery to bypass strict corporate firewalls.")
+user_input_email = st.text_input("Enter your corporate email to begin (e.g. prabhat@tata.com):")
+
+if user_input_email:
+    domain = user_input_email.split("@")[-1].lower()
     
-    if provider == "microsoft":
-        token_data = {
-            "client_id": MS_CLIENT_ID,
-            "client_secret": MS_CLIENT_SECRET,
-            "code": auth_code,
-            "redirect_uri": REDIRECT_URI,
-            "grant_type": "authorization_code",
-        }
-        token_url = MS_TOKEN_URL
+    # 1. THE FIREWALL CHECK
+    # Here we route known strict MDM domains to the fallback instantly.
+    STRICT_MDM_DOMAINS = ["tata.com", "croma.com", "ey.com", "reliance.com"]
+    
+    if domain in STRICT_MDM_DOMAINS:
+        st.warning(f"🔒 Our telemetry shows {domain.capitalize()} blocks SSO connections. Routing to secure fallback.")
+        st.button("📄 Upload Offer Letter / Payslip (EV4)")
         
-    elif provider == "google":
-        token_data = {
-            "client_id": GOOG_CLIENT_ID,
-            "client_secret": GOOG_CLIENT_SECRET,
-            "code": auth_code,
-            "redirect_uri": REDIRECT_URI,
-            "grant_type": "authorization_code",
-        }
-        token_url = GOOG_TOKEN_URL
+    # 2. THE HAPPY PATH (NANGO)
+    else:
+        st.success("⚡ Fast Verification Available!")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            render_nango_button(MICROSOFT_INTEGRATION_ID, "🏢 Verify with Microsoft", "#2F2F2F")
+        with col2:
+            render_nango_button(GOOGLE_INTEGRATION_ID, "🌐 Verify with Google", "#1A73E8")
 
-    # Execute the backend token swap
-    response = requests.post(token_url, data=token_data)
+# ==========================================
+# 📥 NANGO BACKEND API PROXY (DATA FETCH)
+# ==========================================
+st.divider()
+st.write("### Backend Data Verification")
+st.write("*(Click this after completing the popup flow above)*")
+
+provider_to_test = st.radio("Which provider did you just test?", ["Google", "Microsoft"], horizontal=True)
+
+if st.button("Fetch Employee Data"):
+    # 1. Setup the Nango Proxy Headers
+    provider_id = GOOGLE_INTEGRATION_ID if provider_to_test == "Google" else MICROSOFT_INTEGRATION_ID
+    
+    headers = {
+        "Authorization": f"Bearer {NANGO_SECRET_KEY}",
+        "Connection-Id": CONNECTION_ID,
+        "Provider-Config-Key": provider_id
+    }
+    
+    # 2. Define the exact endpoint to hit via the proxy
+    if provider_to_test == "Google":
+        proxy_url = "https://api.nango.dev/proxy/oauth2/v3/userinfo"
+    else:
+        # Microsoft Graph API endpoint
+        proxy_url = "https://api.nango.dev/proxy/v1.0/me"
+
+    # 3. Make the API Call
+    # Notice we don't send any OAuth tokens! Nango injects them silently.
+    response = requests.get(proxy_url, headers=headers)
     
     if response.status_code == 200:
-        result = response.json()
-        id_token = result.get("id_token")
-        claims = decode_jwt(id_token)
-        
-        # 1. Extract Name & Email
-        email = claims.get("email") or claims.get("preferred_username", "Not Provided")
-        user_name = claims.get("name", "Name Not Fetched (Profile scope missing)")
-        
-        # 2. Extract Enterprise ID and map to Company Name
-        if provider == "microsoft":
-            domain_val = claims.get("tid", "Unknown Tenant")
-        elif provider == "google":
-            domain_val = claims.get("hd", "Personal Account (Failed Corporate Check)")
-            
-        company_name = COMPANY_DIRECTORY.get(domain_val, "Unregistered Corporate Partner")
-        
-        # 3. Build the UI
-        st.success(f"✅ Verified via {provider.capitalize()}!")
-        st.divider()
-        st.write(f"**Verified Name:** {user_name}")
-        st.write(f"**Verified Email:** {email}")
-        st.write(f"**Verified Employer:** {company_name} *(ID: {domain_val})*")
-        st.divider()
-        
-        # 4. SHOW RAW BACKEND PAYLOAD (Directly on screen)
-        st.write("#### 🛠️ Raw Backend Payload (Data from Provider)")
-        st.json(claims)
-        
-        st.divider()
-        if st.button("Restart Demo"):
-            st.query_params.clear()
-            st.rerun()
+        st.success(f"✅ Data fetched successfully via Nango Proxy for '{CONNECTION_ID}'!")
+        st.json(response.json())
     else:
-        st.error(f"{provider.capitalize()} Authentication failed: {response.text}")
-
-# ------------------------------------------
-# LOGIN BUTTONS (Pre-Login)
-# ------------------------------------------
-else:
-    col1, col2 = st.columns(2)
-    
-    # Microsoft Button
-    ms_params = {
-        "client_id": MS_CLIENT_ID,
-        "response_type": "code",
-        "redirect_uri": REDIRECT_URI,
-        "response_mode": "query",
-        "scope": SCOPE,
-        "state": "microsoft", # Hidden tag
-    }
-    ms_login_url = f"{MS_AUTH_URL}?{urllib.parse.urlencode(ms_params)}"
-    with col1:
-        st.link_button("🏢 Verify with Microsoft", ms_login_url, type="secondary", use_container_width=True)
-
-    # Google Button
-    goog_params = {
-        "client_id": GOOG_CLIENT_ID,
-        "response_type": "code",
-        "redirect_uri": REDIRECT_URI,
-        "scope": SCOPE,
-        "state": "google", # Hidden tag
-        "prompt": "consent",
-    }
-    goog_login_url = f"{GOOG_AUTH_URL}?{urllib.parse.urlencode(goog_params)}"
-    with col2:
-        st.link_button("🌐 Verify with Google", goog_login_url, type="primary", use_container_width=True)
-        
-    st.caption("🔒 Lowest invasive request prototype. No persistent access requested.")
+        st.error("Authentication not found. Did you complete the popup flow?")
+        st.json(response.json())
