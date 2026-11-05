@@ -1,35 +1,55 @@
 import streamlit as st
 import requests
 import uuid
+import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Axis Bank EV", page_icon="🏦")
+st.set_page_config(page_title="Axis Bank EV Demo", page_icon="🏦")
 
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-# 🚨 Paste your keys from the Nango Environment Settings here
-NANGO_PUBLIC_KEY = "127abd01-31d8-4073-9014-a514fda5ca21"
+# Paste your original "Default - Full access" Secret Key (ending in cfa6) here.
+# Since we are fetching the token securely on the backend, one key does everything!
 NANGO_SECRET_KEY = "51b311fe-57b9-4a14-b142-44900773cfa6"
 
-# Ensure these match your Nango dashboard exactly
 MICROSOFT_INTEGRATION_ID = "microsoft-entra-id"
 GOOGLE_INTEGRATION_ID = "google-oauth"
 
-# Generate a unique connection ID per user session
 if 'connection_id' not in st.session_state:
     st.session_state.connection_id = f"axis-{uuid.uuid4().hex[:6]}"
 
 query_params = st.query_params
 
 # ==========================================
-# 📥 STATE 2: SUCCESS & AUTO-FETCH
+# 🔑 1. GENERATE SESSION TOKEN (BACKEND)
 # ==========================================
-# The JavaScript below automatically appends 'nango_success' to the URL the moment the user logs in.
+# We securely generate a short-lived connect session (30m) via Nango's API.
+@st.cache_data(ttl=1500)
+def fetch_session_token(secret_key):
+    url = "https://api.nango.dev/connect/sessions"
+    headers = {
+        "Authorization": f"Bearer {secret_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {"tags": {}}
+    
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code in [200, 201]:
+        return response.json().get("data", {}).get("token")
+    else:
+        st.error(f"Failed to generate session token: {response.text}")
+        return None
+
+# Fetch the temporary 30-minute token
+session_token = fetch_session_token(NANGO_SECRET_KEY)
+
+# ==========================================
+# 📥 2. SUCCESS & AUTO-FETCH
+# ==========================================
 if "nango_success" in query_params:
     provider = query_params["provider"]
     provider_id = GOOGLE_INTEGRATION_ID if provider == "google" else MICROSOFT_INTEGRATION_ID
     
-    # Setup the proxy fetch exactly like your original architecture
     proxy_url = "https://api.nango.dev/proxy/oauth2/v3/userinfo" if provider == "google" else "https://api.nango.dev/proxy/v1.0/me"
     
     headers = {
@@ -65,43 +85,40 @@ if "nango_success" in query_params:
         st.error(f"Failed to fetch data from Nango: {response.text}")
 
 # ==========================================
-# 🎨 STATE 1: NANGO BUTTONS (PRE-LOGIN)
+# 🎨 3. NANGO BUTTONS (PRE-LOGIN)
 # ==========================================
 else:
     st.title("Axis Bank - Employment Verification")
     st.write("Select your corporate identity provider to instantly verify your employment.")
     
-    # We consolidate the buttons into a single HTML block. This fixes the Streamlit iframe bug
-    # and allows the Javascript to instantly reload the parent window upon a successful login.
-    html_code = f"""
-        <div style="display: flex; gap: 10px; font-family: sans-serif;">
-            <button onclick="window.login('microsoft')" style="flex: 1; padding: 12px; background-color: #2F2F2F; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🏢 Verify with Microsoft</button>
-            <button onclick="window.login('google')" style="flex: 1; padding: 12px; background-color: #1A73E8; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🌐 Verify with Google</button>
-        </div>
+    if session_token:
+        html_code = f"""
+            <div style="display: flex; gap: 10px; font-family: sans-serif;">
+                <button onclick="window.login('microsoft')" style="flex: 1; padding: 12px; background-color: #2F2F2F; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🏢 Verify with Microsoft</button>
+                <button onclick="window.login('google')" style="flex: 1; padding: 12px; background-color: #1A73E8; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🌐 Verify with Google</button>
+            </div>
 
-        <script type="module">
-            import Nango from 'https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest/+esm';
-            
-            // FIX: Pass the public key as an object property
-            const nango = new Nango({{ publicKey: '{NANGO_PUBLIC_KEY}' }});
-            
-            window.login = function(provider) {{
-                const provider_id = provider === 'google' ? '{GOOGLE_INTEGRATION_ID}' : '{MICROSOFT_INTEGRATION_ID}';
+            <script type="module">
+                import Nango from 'https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest/+esm';
                 
-                nango.auth(provider_id, '{st.session_state.connection_id}')
-                    .then(() => {{
-                        const baseUrl = window.parent.location.protocol + "//" + window.parent.location.host + window.parent.location.pathname;
-                        window.parent.location.href = baseUrl + "?nango_success=true&provider=" + provider;
-                    }})
-                    .catch((err) => {{
-                        console.error('Nango Error:', err);
-                        alert("Authentication was blocked or cancelled.");
-                    }});
-            }}
-        </script>
-    """
-    
-    import streamlit.components.v1 as components
-    components.html(html_code, height=80)
-    
-    st.caption("🔒 Powered by Nango Verified Infrastructure.")
+                // Initialize Nango securely with the backend Session Token, NOT a static API key
+                const nango = new Nango({{ connectSessionToken: '{session_token}' }});
+                
+                window.login = function(provider) {{
+                    const provider_id = provider === 'google' ? '{GOOGLE_INTEGRATION_ID}' : '{MICROSOFT_INTEGRATION_ID}';
+                    
+                    nango.auth(provider_id, '{st.session_state.connection_id}')
+                        .then(() => {{
+                            const baseUrl = window.parent.location.protocol + "//" + window.parent.location.host + window.parent.location.pathname;
+                            window.parent.location.href = baseUrl + "?nango_success=true&provider=" + provider;
+                        }})
+                        .catch((err) => {{
+                            console.error('Nango Error:', err);
+                            alert("Authentication failed or was cancelled.");
+                        }});
+                }}
+            </script>
+        """
+        
+        components.html(html_code, height=80)
+        st.caption("🔒 Powered by Nango Verified Infrastructure.")
