@@ -74,27 +74,29 @@ else:
     # We consolidate the buttons into a single HTML block. This fixes the Streamlit iframe bug
     # and allows the Javascript to instantly reload the parent window upon a successful login.
     html_code = f"""
-        <script src="https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest"></script>
         <div style="display: flex; gap: 10px; font-family: sans-serif;">
-            <button onclick="login('microsoft')" style="flex: 1; padding: 12px; background-color: #2F2F2F; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🏢 Verify with Microsoft</button>
-            <button onclick="login('google')" style="flex: 1; padding: 12px; background-color: #1A73E8; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🌐 Verify with Google</button>
+            <button onclick="window.login('microsoft')" style="flex: 1; padding: 12px; background-color: #2F2F2F; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🏢 Verify with Microsoft</button>
+            <button onclick="window.login('google')" style="flex: 1; padding: 12px; background-color: #1A73E8; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold;">🌐 Verify with Google</button>
         </div>
 
-        <script>
+        <script type="module">
+            // FIX: Import Nango explicitly as an ES Module
+            import Nango from 'https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest/+esm';
+            
             const nango = new Nango('{NANGO_PUBLIC_KEY}');
             
-            function login(provider) {{
+            // Attach function to window so the HTML buttons can trigger it
+            window.login = function(provider) {{
                 const provider_id = provider === 'google' ? '{GOOGLE_INTEGRATION_ID}' : '{MICROSOFT_INTEGRATION_ID}';
                 
                 nango.auth(provider_id, '{st.session_state.connection_id}')
                     .then(() => {{
-                        // THE FIX: The moment auth succeeds, forcefully reload Streamlit to the success state.
                         const baseUrl = window.parent.location.protocol + "//" + window.parent.location.host + window.parent.location.pathname;
                         window.parent.location.href = baseUrl + "?nango_success=true&provider=" + provider;
                     }})
                     .catch((err) => {{
                         console.error('Nango Error:', err);
-                        alert("Authentication was blocked or cancelled. Please allow popups for this portal.");
+                        alert("Authentication was blocked or cancelled.");
                     }});
             }}
         </script>
