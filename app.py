@@ -80,12 +80,11 @@ else:
         </div>
 
         <script type="module">
-            // FIX: Import Nango explicitly as an ES Module
             import Nango from 'https://cdn.jsdelivr.net/npm/@nangohq/frontend@latest/+esm';
             
-            const nango = new Nango('{NANGO_PUBLIC_KEY}');
+            // FIX: Pass the public key as an object property
+            const nango = new Nango({{ publicKey: '{NANGO_PUBLIC_KEY}' }});
             
-            // Attach function to window so the HTML buttons can trigger it
             window.login = function(provider) {{
                 const provider_id = provider === 'google' ? '{GOOGLE_INTEGRATION_ID}' : '{MICROSOFT_INTEGRATION_ID}';
                 
