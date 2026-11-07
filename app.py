@@ -9,7 +9,7 @@ st.set_page_config(page_title="Axis Bank EV Demo", page_icon="🏦")
 # ⚙️ CONFIGURATION
 # ==========================================
 # Use your original "Default - Full access" Secret Key (ending in cfa6).
-NANGO_SECRET_KEY = "51b311fe-57b9-4a14-b142-44900773cfa6"
+NANGO_SECRET_KEY = ""
 
 MICROSOFT_INTEGRATION_ID = "microsoft-entra-id"
 GOOGLE_INTEGRATION_ID = "google-oauth"
